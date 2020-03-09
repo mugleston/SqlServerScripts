@@ -1,0 +1,50 @@
+Declare @CurrentIdMaxTolerance Float = 0.25
+
+Create table #IdentityColumns (ID INT Identity(1,1), IdField VarChar(50), IdTable VarChar(50), IdDataType VarChar(50))
+
+Insert into #IdentityColumns (IdField, IdTable, IdDataType)
+
+	(select 
+	COLUMN_NAME, 
+	TABLE_NAME, 
+	DATA_TYPE
+	from INFORMATION_SCHEMA.COLUMNS
+	where COLUMNPROPERTY(object_id(TABLE_SCHEMA+'.'+TABLE_NAME), COLUMN_NAME, 'IsIdentity') = 1
+	AND
+	DATA_TYPE in ('tinyint','smallint','int'))
+
+Declare @CurrentRecord INT = 1
+Declare @StopRecord INT = (Select Max(ID) from #IdentityColumns)
+Declare @CurrentFieldSeed BIGINT
+Declare @CurrentFieldTypeMax BIGINT
+Declare @CurrentTable Varchar(50)
+Declare @CurrentField Varchar(50)
+
+WHILE @CurrentRecord <= @StopRecord
+	Begin
+
+	Select
+	@CurrentFieldTypeMax = CASE IdDataType 
+					WHEN 'tinyint' THEN 255
+					WHEN 'smallint' THEN 32767
+					WHEN 'int' THEN 2147483647
+					END,
+	@CurrentTable = IdTable,
+	@CurrentField = IdField
+	from #IdentityColumns where ID = @CurrentRecord
+
+	select @CurrentFieldSeed = IDENT_CURRENT(@CurrentTable)
+
+    IF  @CurrentFieldSeed > @CurrentFieldTypeMax * (1-@CurrentIdMaxTolerance)  
+		
+		Begin
+			Print(@CurrentTable +'.'+@CurrentField + ' -  Identity Field approaching data type limit')
+		End
+
+	set @CurrentRecord = @CurrentRecord + 1
+
+End
+
+
+drop table #IdentityColumns
+
