@@ -1,15 +1,24 @@
+--Start of Runtime user adjustable variables
 
---Runtime Variables
-Declare @CurrentIdMaxTolerance INT = 10 
-Declare @ShowAllIdentityStatus TINYINT = 0
-Declare @Debug tinyint = 0
-
-
-Declare @ProcProgress VARCHAR(250)
+	Declare @CurrentIdMaxTolerance INT = 10     --What threshold of seed usage should be flagged up 
+	Declare @Debug tinyint = 0                  --Mode "1" displays more debug detail behind calculations
+	Declare @OutputAll TINYINT = 0				--Mode "1" displays all identity field values, regardless of threshold set above
+	Declare @TableOutput TINYINT = 1			--Mode "1" outputs a table, mode "0" outputs seperate lines
+	
+--Static proc variables
+	Declare @CurrentRecord INT = 1
+	Declare @CurrentFieldSeed BIGINT
+	Declare @CurrentFieldTypeMax BIGINT
+	Declare @CurrentTable Varchar(50)
+	Declare @CurrentField Varchar(50)
+	Declare @CurrentFieldType Varchar(50)
+	Declare @CurrentSeedUsagePerc numeric(17,2)
+	Declare @ProcProgress VARCHAR(250)
+	
 SET @ProcProgress = ('Usage threshold set to seeds at ' + Cast(@CurrentIdMaxTolerance as VarChar) + ' usage or more')
 RAISERROR (@ProcProgress, 0, 1) with nowait	
 
-Create table #IdentityColumns (ID INT Identity(1,1), IdField VarChar(50), IdTable VarChar(50), IdDataType VarChar(50), SeedUsage )
+Create table #IdentityColumns (ID INT Identity(1,1), IdField VarChar(50), IdTable VarChar(50), IdDataType VarChar(50), SeedUsagePercent Numeric(17,2), CurrentSeed BIGINT, DataTypeMax BIGINT, ThresholdWarning Varchar(1))
 
 Insert into #IdentityColumns (IdField, IdTable, IdDataType)
 
@@ -22,14 +31,7 @@ Insert into #IdentityColumns (IdField, IdTable, IdDataType)
 	AND
 	DATA_TYPE in ('tinyint','smallint','int'))
 
-Declare @CurrentRecord INT = 1
 Declare @StopRecord INT = (Select Max(ID) from #IdentityColumns)
-Declare @CurrentFieldSeed BIGINT
-Declare @CurrentFieldTypeMax BIGINT
-Declare @CurrentTable Varchar(50)
-Declare @CurrentField Varchar(50)
-Declare @CurrentFieldType Varchar(50)
-Declare @CurrentSeedUsagePerc numeric(17,2)
 
 WHILE @CurrentRecord <= @StopRecord
 	Begin
@@ -45,7 +47,7 @@ WHILE @CurrentRecord <= @StopRecord
 	@CurrentFieldType = IdDataType
 	from #IdentityColumns where ID = @CurrentRecord
 
-	--Identify current field see value
+	--Identify current field seed value
 	select @CurrentFieldSeed = IDENT_CURRENT(@CurrentTable)
 
 	--Identify current seed usage as a percentage of the data type
@@ -64,10 +66,29 @@ WHILE @CurrentRecord <= @StopRecord
 		
 		Begin
 			Print(@CurrentTable +'.'+@CurrentField + ' -  Identity Field approaching data type limit (' + @CurrentFieldType + ' ' + Cast(@CurrentSeedUsagePerc as varchar) +' usage)')
+			Update #IdentityColumns
+			SET SeedUsagePercent = @CurrentSeedUsagePerc, CurrentSeed = @CurrentFieldSeed, DataTypeMax = @CurrentFieldTypeMax, ThresholdWarning = 'Y'
+			Where ID = @CurrentRecord
+
 		End
-	
+
+	Update #IdentityColumns
+	SET SeedUsagePercent = @CurrentSeedUsagePerc, CurrentSeed = @CurrentFieldSeed, DataTypeMax = @CurrentFieldTypeMax
+	Where ID = @CurrentRecord
+
 	set @CurrentRecord = @CurrentRecord + 1
 
 End
+
+IF @OutputAll = 0 AND @TableOutput = 1
+	BEGIN
+	Select * from #IdentityColumns Where ThresholdWarning = 'Y'
+	END
+
+IF @OutputAll = 1 AND @TableOutput = 1
+	BEGIN
+	Select * from #IdentityColumns 
+	END
+
 
 drop table #IdentityColumns
