@@ -1,6 +1,15 @@
-Declare @CurrentIdMaxTolerance Float = 0.25
 
-Create table #IdentityColumns (ID INT Identity(1,1), IdField VarChar(50), IdTable VarChar(50), IdDataType VarChar(50))
+--Runtime Variables
+Declare @CurrentIdMaxTolerance INT = 10 
+Declare @ShowAllIdentityStatus TINYINT = 0
+Declare @Debug tinyint = 0
+
+
+Declare @ProcProgress VARCHAR(250)
+SET @ProcProgress = ('Usage threshold set to seeds at ' + Cast(@CurrentIdMaxTolerance as VarChar) + ' usage or more')
+RAISERROR (@ProcProgress, 0, 1) with nowait	
+
+Create table #IdentityColumns (ID INT Identity(1,1), IdField VarChar(50), IdTable VarChar(50), IdDataType VarChar(50), SeedUsage )
 
 Insert into #IdentityColumns (IdField, IdTable, IdDataType)
 
@@ -19,6 +28,8 @@ Declare @CurrentFieldSeed BIGINT
 Declare @CurrentFieldTypeMax BIGINT
 Declare @CurrentTable Varchar(50)
 Declare @CurrentField Varchar(50)
+Declare @CurrentFieldType Varchar(50)
+Declare @CurrentSeedUsagePerc numeric(17,2)
 
 WHILE @CurrentRecord <= @StopRecord
 	Begin
@@ -30,21 +41,33 @@ WHILE @CurrentRecord <= @StopRecord
 					WHEN 'int' THEN 2147483647
 					END,
 	@CurrentTable = IdTable,
-	@CurrentField = IdField
+	@CurrentField = IdField,
+	@CurrentFieldType = IdDataType
 	from #IdentityColumns where ID = @CurrentRecord
 
+	--Identify current field see value
 	select @CurrentFieldSeed = IDENT_CURRENT(@CurrentTable)
 
-    IF  @CurrentFieldSeed > @CurrentFieldTypeMax * (1-@CurrentIdMaxTolerance)  
+	--Identify current seed usage as a percentage of the data type
+	SET @CurrentSeedUsagePerc = Round((Cast(@CurrentFieldSeed as float)  / CAST(@CurrentFieldTypeMax as float)) * 100,4);
+	
+	IF @Debug = 1
+	Begin
+	SET @ProcProgress = ('Step 3 - Checking ' + @CurrentTable +'.'+@CurrentField + ' - ' + Cast(@CurrentSeedUsagePerc as varchar) + ' usage ' +
+						'(Current Seed ' + Cast(@CurrentFieldSeed as Varchar)  +
+						'/Data Type ' + @CurrentFieldType +')'										
+						)
+	RAISERROR (@ProcProgress, 0, 1) with nowait	
+	End
+
+    IF  @CurrentSeedUsagePerc  > @CurrentIdMaxTolerance 
 		
 		Begin
-			Print(@CurrentTable +'.'+@CurrentField + ' -  Identity Field approaching data type limit')
+			Print(@CurrentTable +'.'+@CurrentField + ' -  Identity Field approaching data type limit (' + @CurrentFieldType + ' ' + Cast(@CurrentSeedUsagePerc as varchar) +' usage)')
 		End
-
+	
 	set @CurrentRecord = @CurrentRecord + 1
 
 End
 
-
 drop table #IdentityColumns
-
