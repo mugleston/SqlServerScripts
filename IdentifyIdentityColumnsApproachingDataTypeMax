@@ -1,6 +1,7 @@
+--Used to identify identity columns within the current database that are approaching their data type max
 --Start of Runtime user adjustable variables
 
-	Declare @CurrentIdMaxTolerance INT = 10     --What threshold of seed usage should be flagged up 
+	Declare @CurrentIdMaxTolerance INT = 90     --What threshold of seed usage should be flagged up 
 	Declare @Debug tinyint = 0                  --Mode "1" displays more debug detail behind calculations
 	Declare @OutputAll TINYINT = 0				--Mode "1" displays all identity field values, regardless of threshold set above
 	Declare @TableOutput TINYINT = 1			--Mode "1" outputs a table, mode "0" outputs seperate lines
